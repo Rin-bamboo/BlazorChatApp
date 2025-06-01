@@ -4,16 +4,22 @@
 @inject NavigationManager Navigation
 
 <h3>チャット</h3>
-
-@if (string.IsNullOrEmpty(userName))
+@if (string.IsNullOrEmpty(groupName) || string.IsNullOrEmpty(userName))
+{
+    <h3>ようこそ！名前を入力してください</h3>
+    <input @bind="groupName" placeholder="グループ名を入力" />
+    <input @bind="tempName" placeholder="名前を入力" />
+    <button @onclick="EnterChat">入室</button>
+}
+@* @if (string.IsNullOrEmpty(userName))
 {
     <h3>ようこそ！名前を入力してください</h3>
     <input @bind="tempName" placeholder="名前を入力" />
     <button @onclick="EnterChat">入室</button>
-}
+} *@
 else
 {
-    <h3>チャットルーム - @userName さん</h3>
+    <h3>チャットルーム -@groupName : @userName さん</h3>
     <input @bind="message" placeholder="メッセージを入力" />
     <button @onclick="Send">送信</button>
 
@@ -27,6 +33,7 @@ else
 
 @code {
     private HubConnection? hubConnection;
+    private string groupName = "ChatGroup"; // グループ名
     private string tempName = string.Empty; // 入力用一時変数
     private string userName = string.Empty;
     private string message = string.Empty;
@@ -35,8 +42,6 @@ else
     protected override async Task OnInitializedAsync()
     {
         Console.WriteLine("Hub 接続開始...");
-        //.WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
-        //.WithUrl("http://192.168.11.29:7231/chatHub")
         hubConnection = new HubConnectionBuilder()
             .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"))
             .Build();
@@ -48,21 +53,35 @@ else
         });
 
         await hubConnection.StartAsync();
-
         Console.WriteLine("Hub 接続完了！");
     }
-    private void EnterChat()
+
+    private async Task EnterChat()
     {
+        if (string.IsNullOrWhiteSpace(groupName))
+        {
+            groupName = "ChatGroup"; // デフォルトのグループ名
+        }
+
         if (!string.IsNullOrWhiteSpace(tempName))
         {
             userName = tempName;
+
+            if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
+            {
+                await hubConnection.InvokeAsync("JoinGroup", groupName);
+                await hubConnection.InvokeAsync("SendMessageToGroup", groupName, "管理メッセージ", $"{userName}が参加しました");
+            }
         }
+
     }
+
     private async Task Send()
     {
         if (!string.IsNullOrWhiteSpace(userName) && !string.IsNullOrWhiteSpace(message))
         {
-            await hubConnection.SendAsync("SendMessage", userName, message);
+            await hubConnection.InvokeAsync("SendMessageToGroup", groupName, userName, message);
+            //await hubConnection.SendAsync("SendMessage", userName, message);
             message = string.Empty;
         }
     }
